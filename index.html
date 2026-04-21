@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Banner Resizer</title>
+<link rel="stylesheet" href="app.css">
+<script src="https://unpkg.com/konva@9/konva.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Banner Resizer</h1>
+    <div class="variant-picker">
+      <label class="muted" for="variant-select">Variant</label>
+      <select id="variant-select" title="Switch between creative variants"></select>
+      <button id="btn-variant-new" title="Duplicate current variant">+</button>
+      <button id="btn-variant-rename" title="Rename this variant">✎</button>
+      <button id="btn-variant-delete" title="Delete this variant">×</button>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-toggle-snap" class="toggle" title="Snap layers to canvas guides while dragging"><span class="dot"></span>Snap</button>
+      <button id="btn-toggle-safezones" class="toggle" title="Show network-reserved safe zones on the active canvas"><span class="dot"></span>Safe Zones</button>
+      <button id="btn-toggle-ref" class="toggle" title="Overlay the uploaded master as a semi-transparent reference on the active canvas"><span class="dot"></span>Ref</button>
+      <button id="btn-toggle-debug" class="toggle" title="Diagnostic overlay: safe margin + quarter grid on the active canvas"><span class="dot"></span>Debug</button>
+      <span class="topbar-spacer"></span>
+      <button id="btn-undo" class="icon" title="Undo (⌘Z)" disabled>↶</button>
+      <button id="btn-redo" class="icon" title="Redo (⌘⇧Z)" disabled>↷</button>
+      <span class="topbar-spacer"></span>
+      <button id="btn-generate" class="primary">Generate</button>
+      <button id="btn-save-template">Save</button>
+      <button id="btn-load-template">Load</button>
+      <input type="file" id="input-load-template" accept=".json" hidden>
+      <button id="btn-export-all">Export All</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar sidebar-left">
+      <section class="panel">
+        <h2>1. Master File</h2>
+        <div id="master-drop" class="dropzone">
+          <input type="file" id="input-master" accept="image/png,image/jpeg,image/webp" hidden>
+          <p>Drop master here or <button class="linklike" id="btn-browse-master">browse</button></p>
+          <div id="master-preview"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>2. Layers</h2>
+        <div id="layers-drop" class="dropzone">
+          <input type="file" id="input-layers" accept="image/png,image/webp" multiple hidden>
+          <p>Drop layer PNGs or <button class="linklike" id="btn-browse-layers">browse</button></p>
+        </div>
+        <ul id="upload-layers-list" class="layer-upload-list"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>3. Ad Networks</h2>
+        <div id="networks-list" class="networks-list"></div>
+        <div class="panel-footer">
+          <span id="sizes-count">0 sizes selected</span>
+        </div>
+      </section>
+    </aside>
+
+    <section class="canvas-area">
+      <div id="canvas-main" class="canvas-main">
+        <div class="empty-state">
+          <p>Upload layers, pick ad sizes, then hit Generate.</p>
+        </div>
+      </div>
+      <div id="canvas-previews" class="canvas-previews"></div>
+    </section>
+
+    <aside class="sidebar sidebar-right">
+      <section class="panel">
+        <h2>Active Canvas</h2>
+        <div id="active-canvas-info" class="muted">No canvas selected</div>
+        <div class="panel-actions">
+          <button id="btn-reset-canvas" disabled>Reset Layout</button>
+        </div>
+        <div class="preset-row">
+          <input type="text" id="preset-name" placeholder="Preset name" disabled>
+          <button id="btn-save-preset" disabled>Save</button>
+        </div>
+        <div class="preset-row">
+          <select id="preset-list" disabled><option value="">Apply preset…</option></select>
+          <button id="btn-delete-preset" disabled title="Delete selected preset">×</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Layers</h2>
+        <ul id="layers-list" class="layers-list"></ul>
+      </section>
+      <section class="panel">
+        <h2>Selected Layer</h2>
+        <div id="transform-panel" class="transform-panel">
+          <div class="muted">Select a layer to edit</div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="export-modal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog" role="dialog" aria-labelledby="export-modal-title">
+      <h3 id="export-modal-title">Export</h3>
+      <div class="modal-row">
+        <label for="export-template">Filename template</label>
+        <input type="text" id="export-template" value="{network}_{w}x{h}_{name}">
+      </div>
+      <div class="modal-hint">Tokens: <code>{network}</code> <code>{w}</code> <code>{h}</code> <code>{name}</code> <code>{index}</code> <code>{variant}</code></div>
+      <label class="modal-check"><input type="checkbox" id="export-all-variants"> Include all variants (one folder per variant)</label>
+      <div class="modal-row">
+        <label>Canvases</label>
+        <div id="export-canvas-list" class="export-canvas-list"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-export-cancel">Cancel</button>
+        <button id="btn-export-confirm" class="primary">Export selected</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/networks.js"></script>
+  <script src="js/roles.js"></script>
+  <script src="js/autoLayout.js"></script>
+  <script src="js/smartLayout.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

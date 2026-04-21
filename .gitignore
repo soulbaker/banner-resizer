@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Local Claude Code config (launch.json + settings live per-machine)
+.claude/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Node (in case tooling is added later)
+node_modules/
+npm-debug.log
+
+# Temp exports / downloads
+*.zip
+banner-template-*.json
