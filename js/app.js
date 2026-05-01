@@ -20,6 +20,7 @@ const state = {
   pendingAsyncEdits: 0,     // while > 0, undo/redo disabled (async uploads in flight)
   variants: {},             // id -> { id, name, master, layers, canvases, selectedSizes, nextLayerOrder }
   activeVariantId: null,
+  customSizes: loadPref("br.customSizes", []), // [{ w, h, name }] — project-level, shared across variants
   prefs: {
     snapEnabled:      loadPref("br.snapEnabled",      true),
     showSafeZones:    loadPref("br.showSafeZones",    false),
@@ -590,6 +591,132 @@ function renderNetworksList() {
     group.appendChild(sizesDiv);
     container.appendChild(group);
   });
+
+  renderCustomSizesGroup(container);
+}
+
+// "Custom Sizes" group: collapsible like the others, but with an inline form to
+// add new (W, H, name) entries. Definitions are project-level and persisted in
+// localStorage so they survive reloads even before the user saves a template.
+function renderCustomSizesGroup(container) {
+  const group = document.createElement("div");
+  group.className = "network-group custom-group";
+
+  const head = document.createElement("div");
+  head.className = "network-head";
+  const title = document.createElement("span");
+  title.textContent = "Custom Sizes";
+  const caret = document.createElement("span");
+  caret.className = "caret";
+  caret.textContent = state.customSizes.length ? "▾" : "▸";
+  head.appendChild(title);
+  head.appendChild(caret);
+  head.addEventListener("click", () => {
+    const open = group.classList.toggle("open");
+    caret.textContent = open ? "▾" : "▸";
+  });
+  if (state.customSizes.length) group.classList.add("open");
+
+  const sizesDiv = document.createElement("div");
+  sizesDiv.className = "network-sizes custom-sizes";
+
+  // Add-form row: W, H, optional name, + button.
+  const form = document.createElement("div");
+  form.className = "custom-form";
+  form.innerHTML = `
+    <input type="number" class="custom-w"    placeholder="W" min="1" max="10000">
+    <input type="number" class="custom-h"    placeholder="H" min="1" max="10000">
+    <input type="text"   class="custom-name" placeholder="Name (optional)">
+    <button class="primary" title="Add custom size">+</button>
+  `;
+  const wInput    = form.querySelector(".custom-w");
+  const hInput    = form.querySelector(".custom-h");
+  const nameInput = form.querySelector(".custom-name");
+  const addBtn    = form.querySelector("button");
+  const submit = () => addCustomSize(+wInput.value, +hInput.value, nameInput.value.trim());
+  addBtn.addEventListener("click", submit);
+  // Enter on any field submits.
+  [wInput, hInput, nameInput].forEach(el => el.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); submit(); }
+  }));
+  sizesDiv.appendChild(form);
+
+  // Existing custom sizes — same checkbox shape as built-in network sizes, plus a remove button.
+  state.customSizes.forEach(s => {
+    const row = document.createElement("label");
+    row.className = "custom-size-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.dataset.network = "Custom";
+    cb.dataset.w = s.w;
+    cb.dataset.h = s.h;
+    cb.dataset.name = s.name;
+    cb.addEventListener("change", updateSelectedSizes);
+
+    const span = document.createElement("span");
+    span.innerHTML = `${s.w}×${s.h} <span class="muted">${s.name}</span>`;
+
+    const rm = document.createElement("button");
+    rm.className = "custom-remove";
+    rm.title = "Remove custom size";
+    rm.textContent = "×";
+    rm.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); removeCustomSize(s); });
+
+    row.appendChild(cb);
+    row.appendChild(span);
+    row.appendChild(rm);
+    sizesDiv.appendChild(row);
+  });
+
+  group.appendChild(head);
+  group.appendChild(sizesDiv);
+  container.appendChild(group);
+}
+
+function addCustomSize(w, h, rawName) {
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1) {
+    return toast("Width and height must be positive numbers", true);
+  }
+  if (w > 10000 || h > 10000) {
+    return toast("Max dimension is 10000px", true);
+  }
+  w = Math.round(w); h = Math.round(h);
+  const name = rawName || `Custom ${w}×${h}`;
+  if (state.customSizes.some(s => s.w === w && s.h === h && s.name === name)) {
+    return toast("That custom size already exists", true);
+  }
+  pushHistory();
+  state.customSizes.push({ w, h, name });
+  savePref("br.customSizes", state.customSizes);
+  renderNetworksList();
+  syncNetworkCheckboxesFromState();
+  toast(`Added custom size ${w}×${h}`);
+}
+
+function removeCustomSize(size) {
+  pushHistory();
+  state.customSizes = state.customSizes.filter(
+    s => !(s.w === size.w && s.h === size.h && s.name === size.name)
+  );
+  savePref("br.customSizes", state.customSizes);
+  // Drop from active selection too so it doesn't linger.
+  state.selectedSizes = state.selectedSizes.filter(
+    s => !(s.network === "Custom" && s.w === size.w && s.h === size.h && s.name === size.name)
+  );
+  // And clean up any already-generated canvas for this size.
+  const removedId = `Custom__${size.w}x${size.h}__${size.name}`;
+  if (state.canvases[removedId]) {
+    if (state.canvases[removedId].stage) state.canvases[removedId].stage.destroy();
+    delete state.canvases[removedId];
+    if (state.activeCanvasId === removedId) {
+      state.activeCanvasId = Object.keys(state.canvases)[0] || null;
+    }
+  }
+  renderNetworksList();
+  syncNetworkCheckboxesFromState();
+  renderPreviews();
+  renderActiveCanvas();
+  toast(`Removed custom size ${size.w}×${size.h}`);
 }
 
 function updateSelectedSizes() {
@@ -1561,6 +1688,7 @@ function saveTemplate() {
     version: 2,
     savedAt: new Date().toISOString(),
     activeVariantId: state.activeVariantId,
+    customSizes: state.customSizes || [],
     variants: Object.values(state.variants).map(v => ({
       id: v.id, name: v.name,
       master: v.master ? { width: v.master.width, height: v.master.height, name: v.master.name } : null,
@@ -1621,6 +1749,10 @@ async function applyTemplate(tpl) {
 
   // v2 templates are variant-aware. v1 gets migrated into a single "Base" variant.
   if (tpl.version >= 2 && Array.isArray(tpl.variants)) {
+    if (Array.isArray(tpl.customSizes)) {
+      state.customSizes = tpl.customSizes.slice();
+      savePref("br.customSizes", state.customSizes);
+    }
     state.variants = {};
     for (const vspec of tpl.variants) {
       const variant = await hydrateVariantFromTemplate(vspec);
@@ -1639,6 +1771,7 @@ async function applyTemplate(tpl) {
     renderUploadLayersList();
     renderMasterPreviewFromState();
     renderDetectedMaster();
+    renderNetworksList(); // rebuild so Custom Sizes group reflects loaded customSizes
     syncNetworkCheckboxesFromState();
     renderPreviews();
     renderActiveCanvas();
